@@ -1,0 +1,59 @@
+{
+  "name": "@webmcp/bridge",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Standalone personal MCP bridge for WebMCP browser tools",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "webmcp-bridge": "dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./protocol": "./dist/protocol.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "deploy/Dockerfile",
+    "deploy/compose.yaml",
+    "deploy/nginx.conf.template",
+    "protocol.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "tsc --noEmit",
+    "check:tests": "tsc -p tsconfig.tests.json",
+    "test": "npm run build && vitest run",
+    "test:https": "npm run build && node scripts/https-test.mjs",
+    "test:package": "npm run package && node scripts/package-test.mjs",
+    "start": "node dist/cli.js serve",
+    "dev": "npm run build && concurrently -k \"node scripts/build.mjs --watch\" \"node --watch dist/cli.js serve\"",
+    "prepack": "npm run build",
+    "package": "node scripts/package.mjs",
+    "format": "prettier --write src tests scripts deploy package.json tsconfig*.json",
+    "format:check": "prettier --check src tests scripts deploy package.json tsconfig*.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "@modelcontextprotocol/node": "2.0.0",
+    "jsonschema": "1.5.0",
+    "pino": "10.3.1",
+    "ws": "8.21.3",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "@types/ws": "8.18.1",
+    "@types/node": "24.13.5",
+    "@modelcontextprotocol/client": "2.0.0",
+    "typescript": "7.0.2",
+    "vitest": "5.0.1",
+    "prettier": "3.9.7",
+    "concurrently": "10.0.5"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

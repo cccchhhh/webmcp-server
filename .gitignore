@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+coverage/
+*.log
+/deploy/certs/
+.env.*
+!.env.example
+/.local/
+artifacts/
+test-results/
+.DS_Store

@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.git
+tests
+*.md
+coverage
+deploy/certs
+
+artifacts
+test-results

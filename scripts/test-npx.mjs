@@ -38,13 +38,13 @@ export async function testNpx({ tarball, cli, pkg }) {
   ])
     delete env[key];
   const children = [];
-  const start = () => {
+  const start = (local = false) => {
     const child = spawn(
-      "npx",
+      local ? process.execPath : "npx",
       [
-        "--yes",
-        `--package=${tarball}`,
-        "webmcp-bridge",
+        ...(local
+          ? [cli, "serve"]
+          : ["--yes", `--package=${tarball}`, "webmcp-bridge"]),
         "--config",
         config,
         "--port",
@@ -88,7 +88,10 @@ export async function testNpx({ tarball, cli, pkg }) {
   const ready = async (state) => {
     for (let i = 0; i < 1200; i++) {
       assert(!state.exited, `npx exited before readiness: ${state.stderr}`);
-      if (state.stderr.includes("WebMCP bridge ready")) {
+      if (
+        state.stderr.includes("WebMCP bridge ready") &&
+        state.stdout.includes('"next"')
+      ) {
         const response = await fetch(base + "/health/ready");
         assert.equal(response.status, 200);
         return;
@@ -117,8 +120,8 @@ export async function testNpx({ tarball, cli, pkg }) {
     assert.equal(setup.mcpSetup.url, base + "/mcp");
     assert.notEqual(setup.plugin.token, setup.agent.token);
     const persisted = await readFile(config, "utf8");
-    assert(!persisted.includes(setup.plugin.token));
-    assert(!persisted.includes(setup.agent.token));
+    assert(persisted.includes(setup.plugin.token));
+    assert(persisted.includes(setup.agent.token));
     assert.equal((await lstat(config)).mode & 0o777, 0o600);
     const { PersonalStore } = await import(
       pathToFileURL(path.join(pkg, "dist/index.js")).href
@@ -135,11 +138,20 @@ export async function testNpx({ tarball, cli, pkg }) {
       ["--config", config, "--port", String(port)],
       /EADDRINUSE|address already in use/,
     );
+    rejectCli(
+      [
+        "--config",
+        path.join(cwd, "conflict", "credentials.json"),
+        "--port",
+        String(port),
+      ],
+      /EADDRINUSE|address already in use/,
+    );
     assert.equal(await readFile(config, "utf8"), persisted);
     await stop(first);
     const second = start();
     await ready(second);
-    assert.equal(second.stdout, "");
+    assert.deepEqual(JSON.parse(second.stdout), setup);
     assert.equal(await readFile(config, "utf8"), persisted);
     const ticket = await fetch(base + "/bridge/ticket", {
       method: "POST",
@@ -171,6 +183,12 @@ export async function testNpx({ tarball, cli, pkg }) {
     assert.equal(mcp.status, 200);
     await mcp.body.cancel();
     await stop(second);
+    const beforeLocal = await readFile(config, "utf8");
+    const local = start(true);
+    await ready(local);
+    assert.deepEqual(JSON.parse(local.stdout), setup);
+    assert.equal(await readFile(config, "utf8"), beforeLocal);
+    await stop(local);
     for (const [name, contents, mode, expected] of [
       ["broken", "{", 0o600, /JSON|position|property/i],
       [
@@ -219,7 +237,7 @@ export async function testNpx({ tarball, cli, pkg }) {
       ),
     );
     console.log(
-      "PASS: npx first start, restart authentication, SIGINT, port conflict, invalid credentials, explicit initialization and concurrent initialization",
+      "PASS: npx and local startup output, reusable tokens, restart authentication, SIGINT, port conflict, invalid credentials, explicit initialization and concurrent initialization",
     );
   } finally {
     for (const state of children) {

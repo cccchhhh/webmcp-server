@@ -47,8 +47,8 @@ try {
           headers: { Authorization: `Bearer ${credentials.agent.token}` },
         },
         next: serving
-          ? "Keep these tokens private. Starting HTTP MCP bridge; keep this terminal open. Ctrl+C stops the bridge. Storage contains hashes only."
-          : "Keep these tokens private. Run webmcp-bridge serve. Tokens are only shown on issue; storage contains hashes.",
+          ? "HTTP MCP bridge is ready. Keep this terminal open. Ctrl+C stops the bridge. Keep these tokens private; they are saved in the private credential file and shown on every startup."
+          : "Keep these tokens private. Run webmcp-bridge serve. Tokens are saved in the private credential file and shown on every startup.",
       });
     if (command === "init") {
       printSetup(await store.init());
@@ -66,11 +66,16 @@ try {
     } else if (command === "list") print(await store.listCredentials());
     else if (command === "serve") {
       if (!positionals.length && c.DEPLOYMENT_MODE === "local") {
-        const credentials = await store.initIfMissing();
-        if (credentials) printSetup(credentials, true);
+        await store.initIfMissing();
       }
       const log = pino({ level: c.LOG_LEVEL }, destination(2));
       const app = await startHttp(c, store, log);
+      try {
+        printSetup(await store.startupCredentials(), true);
+      } catch (error) {
+        await app.close();
+        throw error;
+      }
       log.info({ host: c.HOST, port: c.PORT }, "WebMCP bridge ready");
       const shutdown = () => {
         void app.close().catch(() => {

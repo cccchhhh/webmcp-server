@@ -57,8 +57,8 @@ try {
   assert.equal(initial.mcpSetup.url, "http://127.0.0.1:38472/mcp");
   assert.notEqual(initial.agent.token, initial.plugin.token);
   const persisted = await readFile(credentialsFile, "utf8");
-  assert(!persisted.includes(initial.agent.token));
-  assert(!persisted.includes(initial.plugin.token));
+  assert(persisted.includes(initial.agent.token));
+  assert(persisted.includes(initial.plugin.token));
   const issued = command(["issue", "--role", "agent"]);
   const rotated = command(["rotate", "--id", issued.id]);
   assert.equal(rotated.id, issued.id);

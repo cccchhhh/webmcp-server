@@ -151,10 +151,12 @@ async function call(client: Client, name: string, args = {}) {
   return r.structuredContent as any;
 }
 describe("standalone bridge", () => {
-  it("private hashed credentials, rotation, revocation and explicit configuration", async () => {
+  it("private reusable credentials, rotation, revocation and explicit configuration", async () => {
     const s = await setup();
     const raw = await readFile(s.store.file, "utf8");
-    expect(raw).not.toContain(s.credentials.agent.token);
+    expect(raw).toContain(s.credentials.agent.token);
+    expect(raw).toContain(s.credentials.plugin.token);
+    expect(await s.store.startupCredentials()).toEqual(s.credentials);
     expect((await stat(s.store.file)).mode & 0o777).toBe(0o600);
     expect((await stat(s.dir)).mode & 0o777).toBe(0o700);
     await expect(s.store.init()).rejects.toThrow("Already initialized");
@@ -163,8 +165,12 @@ describe("standalone bridge", () => {
       await s.store.authenticate(s.credentials.agent.token),
     ).toBeUndefined();
     expect((await s.store.authenticate(rotated.token))?.role).toBe("agent");
+    expect((await s.store.startupCredentials()).agent).toEqual(rotated);
     await s.store.revoke(rotated.id);
     expect(await s.store.authenticate(rotated.token)).toBeUndefined();
+    await expect(s.store.startupCredentials()).rejects.toThrow(
+      "issue --role agent",
+    );
     await chmod(s.store.file, 0o644);
     await expect(
       s.store.authenticate(s.credentials.plugin.token),

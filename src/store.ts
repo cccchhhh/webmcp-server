@@ -12,13 +12,21 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { AppError, type Principal, type Store } from "./types.js";
 const roleSchema = z.enum(["agent", "device"]);
+const hash = (v: string) => createHash("sha256").update(v).digest("hex");
 const credential = z
   .object({
     id: z.string().uuid(),
     role: roleSchema,
     hash: z.string().regex(/^[a-f0-9]{64}$/),
+    token: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{43}$/)
+      .optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => !value.token || hash(value.token) === value.hash, {
+    message: "Stored token does not match credential hash",
+  });
 const dataSchema = z
   .object({
     version: z.literal(1),
@@ -40,7 +48,6 @@ const dataSchema = z
   .strict();
 type Data = z.infer<typeof dataSchema>;
 const empty = (): Data => ({ version: 1, tokens: [], devices: [] });
-const hash = (v: string) => createHash("sha256").update(v).digest("hex");
 export class PersonalStore implements Store {
   constructor(public readonly file: string) {}
   private async read(): Promise<Data> {
@@ -92,7 +99,7 @@ export class PersonalStore implements Store {
     id: string = randomUUID(),
   ) {
     const token = randomBytes(32).toString("base64url");
-    data.tokens.push({ id, role, hash: hash(token) });
+    data.tokens.push({ id, role, hash: hash(token), token });
     return { id, role, token };
   }
   // Never recreate an existing file, even when all credentials were revoked.
@@ -156,6 +163,35 @@ export class PersonalStore implements Store {
   }
   async listCredentials() {
     return (await this.read()).tokens.map(({ id, role }) => ({ id, role }));
+  }
+  async startupCredentials() {
+    const select = (data: Data) => {
+      // Do not recreate a role whose credentials were explicitly revoked.
+      for (const role of ["agent", "device"] as const) {
+        if (!data.tokens.some((item) => item.role === role))
+          throw Error(`No ${role} credential; use issue --role ${role}`);
+      }
+      const find = (role: "agent" | "device") => {
+        const item = data.tokens.find(
+          (item) => item.role === role && item.token,
+        );
+        return item?.token
+          ? { id: item.id, role: item.role, token: item.token }
+          : undefined;
+      };
+      return { agent: find("agent"), plugin: find("device") };
+    };
+    const current = select(await this.read());
+    if (current.agent && current.plugin)
+      return { agent: current.agent, plugin: current.plugin };
+    // Legacy hashes cannot be reversed. Retain them and issue displayable tokens once.
+    return this.edit((data) => {
+      const current = select(data);
+      return {
+        agent: current.agent ?? this.issue(data, "agent"),
+        plugin: current.plugin ?? this.issue(data, "device"),
+      };
+    });
   }
   async authenticate(token: string): Promise<Principal | undefined> {
     const t = (await this.read()).tokens.find((t) => t.hash === hash(token));

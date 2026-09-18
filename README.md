@@ -14,9 +14,9 @@ npx -y @webmcp/bridge
 npx -y @webmcp/bridge --port 38473 --config /absolute/private/credentials.json
 ```
 
-首次运行仅在凭证文件不存在时自动初始化，显示插件 origin/token 和 MCP URL/Authorization，然后前台启动。将两组接入信息分别填入插件与 AI 客户端。默认地址是 `http://127.0.0.1:38472`，MCP 地址为该 origin 下的 `/mcp`，使用 Streamable HTTP。保持终端运行，Ctrl+C 停止服务；这不是 stdio 服务或后台守护进程。
+首次运行仅在凭证文件不存在时自动初始化。每次成功启动并监听端口后，终端都会显示 MCP 地址、Agent 令牌、插件地址和插件令牌（JSON 中的 mcpSetup、agent.token 与 plugin.token）；端口占用等启动失败不会输出连接信息。将两组接入信息分别填入插件与 AI 客户端。默认地址是 `http://127.0.0.1:38472`，MCP 地址为该 origin 下的 `/mcp`，使用 Streamable HTTP。保持终端运行，Ctrl+C 停止服务；这不是 stdio 服务或后台守护进程。
 
-后续运行复用 `~/.config/webmcp-bridge/credentials.json`，不再次显示 token。遗失 token 可使用 `issue` 签发或 `rotate` 轮换。已有空凭证文件、损坏文件或不安全权限不会被自动覆盖；并发初始化失败时确认另一个进程的输出后重试。远程模式和显式 `serve` 仍需先执行 `init`。
+后续运行复用 `~/.config/webmcp-bridge/credentials.json`，再次显示同一组 token，不重复签发或改写凭证文件。本地 `npm start`、`node dist/cli.js serve` 和 npx 入口均使用这一输出行为。已有空凭证文件、损坏文件或不安全权限不会被自动覆盖；并发初始化失败时确认另一个进程的输出后重试。远程模式和显式 `serve` 仍需先执行 `init`。
 
 ```sh
 npx -y @webmcp/bridge list
@@ -60,13 +60,13 @@ webmcp-bridge rotate --id 凭证ID
 webmcp-bridge revoke --id 凭证ID
 ```
 
-默认使用 `~/.config/webmcp-bridge/credentials.json`，或通过 `--config` / `BRIDGE_CONFIG_FILE` 指定。管理命令与服务必须指向同一文件。目录要求 0700、文件要求 0600；只存令牌散列、角色与浏览器绑定，拒绝符号链接及过宽权限。并发写入用锁文件保护；异常遗留锁需先确认没有进程修改该文件再清理。
+默认使用 `~/.config/webmcp-bridge/credentials.json`，或通过 `--config` / `BRIDGE_CONFIG_FILE` 指定。管理命令与服务必须指向同一文件。目录要求 0700、文件要求 0600；保存令牌原文及散列、角色与浏览器绑定，供启动时重新显示；请将凭证文件和终端输出视为敏感信息，拒绝符号链接及过宽权限。并发写入用锁文件保护；异常遗留锁需先确认没有进程修改该文件再清理。
 
-签发或轮换时显示一次明文令牌；`list` 仅显示 ID 与角色。轮换保留凭证 ID 和浏览器身份，旧令牌不能再发新请求。已连接插件约 1 秒内复核并断开；正在执行的调用在返回前再次校验身份，撤销后不释放业务结果。撤销 device 凭证同时删除其浏览器绑定。
+签发或轮换时显示明文令牌，启动时显示每种角色的第一枚可展示令牌；`list` 仅显示 ID 与角色，不输出令牌或散列。轮换保留凭证 ID 和浏览器身份，旧令牌不能再发新请求。已连接插件约 1 秒内复核并断开；正在执行的调用在返回前再次校验身份，撤销后不释放业务结果。撤销 device 凭证同时删除其浏览器绑定。
 
 个人实例的有效 Agent 可访问所有已共享浏览器。每个浏览器可以使用独立 device 令牌；同一浏览器身份不能被其他凭证 ID 接管，可轮换原凭证，或撤销后重新接入。
 
-当前轻量桥接的端口、凭证文件与令牌保持兼容，无需重新初始化。旧 WebMCP Service 数据库和旧 pairings 文件不自动导入，也不会被删除。
+旧版仅含散列的凭证文件可直接升级，无需重新初始化：首次成功监听后，为缺少可展示令牌的现存角色补发一枚并保存，原令牌及浏览器绑定继续有效。旧令牌原文不可还原；已有浏览器可继续使用旧令牌，不需要切换到补发的插件令牌。若某个角色的凭证已全部撤销，启动不会自动恢复该角色，需使用 `issue --role agent|device` 显式签发后再启动。旧 WebMCP Service 数据库和旧 pairings 文件不自动导入，也不会被删除。
 
 ## 对外接口与行为
 
